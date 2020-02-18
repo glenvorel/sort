@@ -99,7 +99,7 @@ class KalmanBoxTracker(object):
     Initialises a tracker using initial bounding box.
     """
     #define constant velocity model
-    self.kf = KalmanFilter(dim_x=7, dim_z=4, compute_log_likelihood=False)
+    self.kf = KalmanFilter(dim_x=7, dim_z=4)
     self.kf.F = np.array([[1,0,0,0,1,0,0],[0,1,0,0,0,1,0],[0,0,1,0,0,0,1],[0,0,0,1,0,0,0],  [0,0,0,0,1,0,0],[0,0,0,0,0,1,0],[0,0,0,0,0,0,1]])
     self.kf.H = np.array([[1,0,0,0,0,0,0],[0,1,0,0,0,0,0],[0,0,1,0,0,0,0],[0,0,0,1,0,0,0]])
 
@@ -245,10 +245,20 @@ class Sort(object):
         trk = KalmanBoxTracker(dets[i,:])
         self.trackers.append(trk)
     i = len(self.trackers)
-    for trk in reversed(self.trackers):
+
+    trackers_len = len(self.trackers) - 1
+    for tracker_index, trk in enumerate(reversed(self.trackers)):
         d = trk.get_state()[0]
+
+        search_tracker = trackers_len - tracker_index
+        matched_row = np.where(matched[:, 1] == search_tracker)[0]
+        if matched_row.shape[0] == 1:
+          det_index = matched[matched_row][0][0]
+        else:
+          det_index = -1
+
         if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
-          ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) # +1 as MOT benchmark requires positive
+          ret.append(np.concatenate((d, [trk.id+1], [det_index])).reshape(1,-1)) # +1 as MOT benchmark requires positive
         i -= 1
         # remove dead tracklet
         if(trk.time_since_update > self.max_age):
