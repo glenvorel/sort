@@ -101,7 +101,7 @@ class KalmanBoxTracker(object):
     Initialises a tracker using initial bounding box.
     """
     #define constant velocity model
-    self.kf = KalmanFilter(dim_x=7, dim_z=4) 
+    self.kf = KalmanFilter(dim_x=7, dim_z=4)
     self.kf.F = np.array([[1,0,0,0,1,0,0],[0,1,0,0,0,1,0],[0,0,1,0,0,0,1],[0,0,0,1,0,0,0],  [0,0,0,0,1,0,0],[0,0,0,0,0,1,0],[0,0,0,0,0,0,1]])
     self.kf.H = np.array([[1,0,0,0,0,0,0],[0,1,0,0,0,0,0],[0,0,1,0,0,0,0],[0,0,0,1,0,0,0]])
 
@@ -241,6 +241,7 @@ class Sort(object):
         self.trackers.append(trk)
     i = len(self.trackers)
 
+    unmatched_dets_list = unmatched_dets.tolist()
     trackers_len = len(self.trackers) - 1
     for tracker_index, trk in enumerate(reversed(self.trackers)):
         d = trk.get_state()[0]
@@ -249,8 +250,10 @@ class Sort(object):
         matched_row = np.where(matched[:, 1] == search_tracker)[0]
         if matched_row.shape[0] == 1:
           det_index = matched[matched_row][0][0]
+        elif unmatched_dets_list:
+          det_index = unmatched_dets_list.pop()
         else:
-          det_index = -1
+          det_index = -1  # this index will never be returned
 
         if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
           ret.append(np.concatenate((d, [trk.id+1], [det_index])).reshape(1,-1)) # +1 as MOT benchmark requires positive
@@ -303,7 +306,7 @@ if __name__ == '__main__':
                        iou_threshold=args.iou_threshold) #create instance of the SORT tracker
     seq_dets = np.loadtxt(seq_dets_fn, delimiter=',')
     seq = seq_dets_fn[pattern.find('*'):].split('/')[0]
-    
+
     with open('output/%s.txt'%(seq),'w') as out_file:
       print("Processing %s."%(seq))
       for frame in range(int(seq_dets[:,0].max())):
