@@ -28,6 +28,7 @@ from skimage import io
 import glob
 import time
 import argparse
+from filterpy.common import inv_diagonal
 from filterpy.kalman import KalmanFilter
 
 np.random.seed(0)
@@ -112,6 +113,7 @@ class KalmanBoxTracker(object):
     self.kf.Q[4:,4:] *= 0.01
 
     self.kf.x[:4] = convert_bbox_to_z(bbox)
+    self.kf.inv = inv_diagonal
     self.time_since_update = 0
     self.id = KalmanBoxTracker.count
     KalmanBoxTracker.count += 1
@@ -119,6 +121,7 @@ class KalmanBoxTracker(object):
     self.hits = 0
     self.hit_streak = 0
     self.age = 0
+    self.detection_index = bbox[5]
 
   def update(self,bbox):
     """
@@ -128,6 +131,7 @@ class KalmanBoxTracker(object):
     self.history = []
     self.hits += 1
     self.hit_streak += 1
+    self.detection_index = bbox[5]
     self.kf.update(convert_bbox_to_z(bbox))
 
   def predict(self):
@@ -216,6 +220,11 @@ class Sort(object):
 
     NOTE: The number of objects returned may differ from the number of detections provided.
     """
+    # Generate detection indices
+    num_dets = dets.shape[0]
+    if num_dets > 0:
+      detection_indices_column = np.arange(start=0, stop=num_dets).reshape((num_dets, 1))
+      dets = np.hstack((dets, detection_indices_column))
     self.frame_count += 1
     # get predicted locations from existing trackers.
     trks = np.zeros((len(self.trackers), 5))
@@ -240,23 +249,10 @@ class Sort(object):
         trk = KalmanBoxTracker(dets[i,:])
         self.trackers.append(trk)
     i = len(self.trackers)
-
-    unmatched_dets_list = unmatched_dets.tolist()
-    trackers_len = len(self.trackers) - 1
     for tracker_index, trk in enumerate(reversed(self.trackers)):
         d = trk.get_state()[0]
-
-        search_tracker = trackers_len - tracker_index
-        matched_row = np.where(matched[:, 1] == search_tracker)[0]
-        if matched_row.shape[0] == 1:
-          det_index = matched[matched_row][0][0]
-        elif unmatched_dets_list:
-          det_index = unmatched_dets_list.pop()
-        else:
-          det_index = -1  # this index will never be returned
-
         if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
-          ret.append(np.concatenate((d, [trk.id+1], [det_index])).reshape(1,-1)) # +1 as MOT benchmark requires positive
+          ret.append(np.concatenate((d, [trk.id+1], [trk.detection_index])).reshape(1,-1)) # +1 as MOT benchmark requires positive
         i -= 1
         # remove dead tracklet
         if(trk.time_since_update > self.max_age):
